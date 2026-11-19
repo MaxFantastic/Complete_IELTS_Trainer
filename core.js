@@ -29,6 +29,28 @@
     return actual !== '' && question.answer.some(expected => normalizeAnswer(expected) === actual);
   }
 
+  function splitTranscript(value) {
+    const text = String(value ?? '').trim();
+    const sentences = [];
+    let start = 0;
+    for (const match of text.matchAll(/[.!?…]+["'”’)\]]*(?=\s|$)/gu)) {
+      const end = match.index + match[0].length;
+      if (match[0] === '.' && end < text.length) {
+        const tail = text.slice(Math.max(start, end - 8), end);
+        // Periods inside decimals have no following space. Keep titles and
+        // mid-sentence time abbreviations attached to the surrounding words.
+        if (/\b(?:Mr|Mrs|Ms|Dr|Prof|e\.g|i\.e)\.$/i.test(tail)) continue;
+        if (/\b(?:[ap]\.m|etc)\.$/i.test(tail) && /^\s+\p{Ll}/u.test(text.slice(end))) continue;
+      }
+      const sentence = text.slice(start, end).trim();
+      if (sentence) sentences.push(sentence);
+      start = end;
+    }
+    const remainder = text.slice(start).trim();
+    if (remainder) sentences.push(remainder);
+    return sentences;
+  }
+
   function localDateKey(date = new Date()) {
     if (!(date instanceof Date) || !Number.isFinite(date.getTime())) throw new TypeError('无效日期');
     return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
@@ -284,5 +306,5 @@
     return { version: 1, progress, vocabulary, settings, history };
   }
 
-  return Object.freeze({ SKILLS, normalizeAnswer, grade, localDateKey, nextReview, selectDaily, recommend, summarize, validateImport });
+  return Object.freeze({ SKILLS, normalizeAnswer, grade, splitTranscript, localDateKey, nextReview, selectDaily, recommend, summarize, validateImport });
 });

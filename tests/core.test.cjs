@@ -141,3 +141,16 @@ test('vocabulary imports reject unsafe keys, invalid fields and excessive entry 
   const huge = base(); huge.vocabulary = Object.fromEntries(Array.from({length:20001}, (_,i)=>[`word-${i}`, {saved:true}]));
   assert.throws(() => C.validateImport(huge, questions));
 });
+test('listening sentences preserve dialogue labels, amounts, titles and time abbreviations', () => {
+  const transcript = 'Host: Dr. Lee arrives at 9.15 a.m. on Monday. Bring a £12.50 deposit!\r\nGuide: “Ready?” We can start';
+  assert.deepEqual(C.splitTranscript(transcript), [
+    'Host: Dr. Lee arrives at 9.15 a.m. on Monday.',
+    'Bring a £12.50 deposit!',
+    'Guide: “Ready?”',
+    'We can start'
+  ]);
+  assert.deepEqual(C.splitTranscript('Doors close at 5 p.m. Please be here early.'), [
+    'Doors close at 5 p.m.', 'Please be here early.'
+  ]);
+  assert.deepEqual(C.splitTranscript('  '), []);
+});

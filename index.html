@@ -6,9 +6,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>IELTS Atelier · 雅思练习室</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./styles.css">
+  <noscript><style>.app-splash{display:none}</style></noscript>
   <script defer src="./questions.js"></script><script defer src="./sources.js"></script><script defer src="./core.js"></script><script defer src="./app.js"></script>
 </head>
 <body>
+  <div id="app-splash" class="app-splash" role="status">
+    <div class="app-splash-content">
+      <span class="atelier-mark" data-motion="launch" aria-hidden="true"><span class="atelier-tile"><span class="atelier-dot"></span></span></span>
+      <p class="app-splash-name">IELTS Atelier</p>
+      <p class="app-splash-status">正在准备练习室…</p>
+    </div>
+  </div>
   <a class="skip" href="#main">跳到主要内容</a>
   <aside class="sidebar">
     <a class="brand" href="#dashboard"><span class="brand-mark">i<span>·</span></span><span>IELTS <b>Atelier</b><small>你的雅思练习室</small></span></a>
@@ -26,7 +34,7 @@
     <div class="local-note">学习记录保存在当前设备</div>
   </aside>
   <div class="workspace">
-    <header class="topbar"><div class="breadcrumb">我的学习空间 <span>/</span> <b id="page-label">学习概览</b></div><div class="top-right"><span id="date-label"></span><span id="module-label" class="pill">Academic</span><a href="#settings" class="avatar" aria-label="学习设置">ME</a></div></header>
+    <header class="topbar"><div class="breadcrumb">我的学习空间 <span>/</span> <b id="page-label">学习概览</b></div><div class="top-right"><span id="date-label"></span><span id="module-label" class="pill">Academic</span><a href="#settings" class="avatar atelier-profile" aria-label="学习设置"><span class="atelier-mark" data-motion="idle" aria-hidden="true"><span class="atelier-tile"><span class="atelier-dot"></span></span></span></a></div></header>
     <main id="main" tabindex="-1"></main>
     <footer>IELTS Atelier <span>独立学习工具 · 非 IELTS 官方产品</span></footer>
   </div>

@@ -2,7 +2,7 @@
 
 // Include the scope in the prefix so another Pages project is never cleared.
 const PREFIX = 'ielts-atelier:' + self.registration.scope + ':';
-const CACHE = PREFIX + '2026-11-16-v1';
+const CACHE = PREFIX + '2026-11-19-v8';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './core.js', './questions.js',
   './sources.js', './icon.svg', './icon-192.png', './icon-512.png',
