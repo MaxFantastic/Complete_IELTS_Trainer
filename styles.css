@@ -28,6 +28,22 @@
   color:var(--ink);font:16px/1.65 Georgia,serif;white-space:pre-wrap;overflow-wrap:anywhere;
 }
 
+.app-update{
+  position:fixed;z-index:25;right:24px;bottom:24px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  max-width:calc(100% - 48px);padding:10px 12px 10px 16px;
+  border:1px solid var(--line);border-radius:12px;background:var(--paper);
+  color:var(--ink);box-shadow:0 4px 20px #253f3520;
+}
+.app-update[hidden]{display:none}
+.app-update .btn{flex:none}
+.app-update:not([hidden])~.toast{bottom:96px}
+
+@media (max-width:600px){
+  .app-update{left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-width:none}
+  .app-update:not([hidden])~.toast{bottom:calc(152px + env(safe-area-inset-bottom))}
+}
+
 .mock-question-nav{margin-top:22px}
 .mock-question-nav .question-numbers{margin-top:12px;min-height:34px;align-items:center}
 .question-filter span{opacity:.75;font-variant-numeric:tabular-nums}

@@ -2,7 +2,7 @@
 
 // Include the scope in the prefix so another Pages project is never cleared.
 const PREFIX = 'ielts-atelier:' + self.registration.scope + ':';
-const CACHE = PREFIX + '2026-11-19-v8';
+const CACHE = PREFIX + '2026-11-19-v9';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './core.js', './questions.js',
   './sources.js', './icon.svg', './icon-192.png', './icon-512.png',
@@ -11,7 +11,12 @@ const SHELL = [
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
-  // The updated worker activates after the old tabs close, avoiding a forced reload.
+  // Keep the new worker waiting until the current clients close or a learner chooses to update.
+});
+
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'IELTS_APPLY_UPDATE' || !event.source?.url?.startsWith(self.registration.scope)) return;
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {

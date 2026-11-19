@@ -19,6 +19,7 @@
   let readingOffsets={material:null,answer:null};
   let playback=null;
   let sentenceStudy=null;
+  let refreshUpdateBanner=null;
   let session=null,timer=null,recorder=null,recordStream=null,recordURL=null,recordMime='audio/webm',recordPending=null,confirmCallback=null;
   let filter={skill:'all',type:'all',search:'',origin:'all'},sourceFilter={year:'all',skill:'all'},vocabFilter='all';
   const $=(s)=>document.querySelector(s), esc=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -132,6 +133,7 @@
     }
     renderedRoute=route;
     updateChrome();
+    refreshUpdateBanner?.();
   }
 
   function navigate(route){
@@ -324,6 +326,7 @@
   function renderSession(keepMaterial=false){
     const q=currentQ();
     if(!q){finish();return;}
+    refreshUpdateBanner?.();
     const stage=session.stages?.[session.stageIndex];
     const progress=`${(session.index+1)/session.ids.length*100}%`;
     const questionType=`${SKILLS[q.skill].en} · ${q.type}`;
@@ -643,6 +646,7 @@
           <p style="margin-top:14px">你的答案：${answered?esc(answer):'未作答'}</p>
           ${feedback(question,correct)}
         </details>`).join('')}</div>`:''}`;
+    refreshUpdateBanner?.();
     scrollToTop();
   }
 
@@ -806,7 +810,82 @@
   window.addEventListener('hashchange',openRoute);
   window.addEventListener('pagehide',()=>{persistSession();stopMedia();});
   function checkReminder(){if(!state.settings.remindersEnabled||session)return;const now=new Date(),[h,m]=state.settings.reminderTime.split(':').map(Number),done=todayRecords().reduce((s,r)=>s+r.answered,0);if(now.getHours()*60+now.getMinutes()>=h*60+m&&done<state.settings.dailyGoal&&checkReminder.last!==C.localDateKey()){checkReminder.last=C.localDateKey();toast(`到训练时间了，今天还差 ${state.settings.dailyGoal-done} 题，开始每日小练吧。`);}}
+
+  async function setupAppUpdates(){
+    const serviceWorker=navigator.serviceWorker;
+    const banner=$('#app-update');
+    if(!serviceWorker||location.protocol==='file:'||!banner)return;
+    const button=$('#apply-update');
+    const message=$('#update-message');
+    let registration=null;
+    let controller=serviceWorker.controller;
+    let activeUpdate=false,applying=false,checking=false,retry=false;
+    let applyTimeout=null;
+
+    function waitingWorker(){return serviceWorker.controller?registration?.waiting:null;}
+
+    function refresh(){
+      banner.hidden=Boolean(session)||!(waitingWorker()||activeUpdate||applying);
+      button.disabled=applying;
+      message.textContent=applying?'正在应用更新…':retry?'更新暂未完成，请再试一次。':'有新版本可用。';
+    }
+    refreshUpdateBanner=refresh;
+
+    function applyFailed(){
+      clearTimeout(applyTimeout);
+      applying=false;
+      retry=true;
+      refresh();
+    }
+
+    button.addEventListener('click',()=>{
+      if(session||applying)return;
+      const waiting=waitingWorker();
+      if(!waiting){
+        if(activeUpdate)location.reload();
+        return;
+      }
+      applying=true;
+      retry=false;
+      refresh();
+      applyTimeout=setTimeout(applyFailed,10000);
+      try{waiting.postMessage({type:'IELTS_APPLY_UPDATE'});}catch{applyFailed();}
+    });
+
+    serviceWorker.addEventListener('controllerchange',()=>{
+      const previous=controller;
+      controller=serviceWorker.controller;
+      if(previous&&controller&&controller!==previous){
+        activeUpdate=true;
+        const canReload=applying&&!session;
+        clearTimeout(applyTimeout);
+        applying=false;
+        retry=false;
+        if(canReload){location.reload();return;}
+      }
+      refresh();
+    });
+
+    function watchInstalling(){
+      registration.installing?.addEventListener('statechange',refresh);
+      refresh();
+    }
+
+    async function checkForUpdate(){
+      if(document.visibilityState==='hidden'||checking)return;
+      checking=true;
+      try{await registration.update();}catch{}finally{checking=false;refresh();}
+    }
+
+    registration=await serviceWorker.register('./sw.js',{updateViaCache:'none'});
+    registration.addEventListener('updatefound',watchInstalling);
+    watchInstalling();
+    document.addEventListener('visibilitychange',checkForUpdate);
+    for(const event of ['pageshow','focus','online'])window.addEventListener(event,checkForUpdate);
+    checkForUpdate();
+  }
+
   try{render();}finally{dismissSplash();}
   setTimeout(checkReminder,1500);setInterval(checkReminder,60000);
-  if('serviceWorker'in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  setupAppUpdates().catch(()=>{});
 })();

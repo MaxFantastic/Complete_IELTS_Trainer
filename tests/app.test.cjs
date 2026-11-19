@@ -19,8 +19,9 @@ const fixtures = [
   ...[1,2,3].map(i => ({id:`speaking-${i}`, skill:'speaking', module:'both', origin:'original', title:`Speaking Part ${i}`, type:`Part ${i}`, topic:'Study', level:'基础', prompt:'Describe your interests.', explanation:'Give specific examples.'}))
 ];
 
-function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash = '#dashboard', recording = false, reducedMotion = false, mobileReading = false} = {}) {
+function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash = '#dashboard', recording = false, reducedMotion = false, mobileReading = false, serviceWorker} = {}) {
   let clock = now, serial = 0;
+  let reloads = 0;
   const events = {}, windowEvents = {}, intervals = new Map(), timeouts = new Map(), nodes = new Map();
   const mainIds = new Set(), answerIds = new Set(), scrollCalls = [];
   const frames = [];
@@ -38,6 +39,7 @@ function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash 
     let html = '';
     const classes = new Set();
     const attributes = new Map();
+    const eventTarget = new EventTarget();
     return {id, value:'', textContent:'', dataset:{}, open:false, style:{}, scrollTop:0,
       classList:{add(name){classes.add(name);},remove(name){classes.delete(name);},contains(name){return classes.has(name);},
         toggle(name,force=!classes.has(name)){if(force)classes.add(name);else classes.delete(name);return force;}},
@@ -65,11 +67,18 @@ function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash 
           if (nodes.has('answer')) nodes.get('answer').value = unescape(input?.[1] ?? textarea?.[1] ?? '');
         }
       },
-      showModal(){this.open = true;}, close(){this.open = false;}, focus(){}, setSelectionRange(){}, scrollIntoView(){}, click(){}, remove(){}
+      addEventListener(name,fn){eventTarget.addEventListener(name,fn);},
+      showModal(){this.open = true;}, close(){this.open = false;}, focus(){}, setSelectionRange(){}, scrollIntoView(){},
+      click(){eventTarget.dispatchEvent(new Event('click'));}, remove(){}
     };
   }
   for (const id of ['main','app-splash','toast','confirm-title','confirm-message','confirm-dialog','module-label','date-label','review-badge','page-label']) nodes.set(id, element(id));
+  if (serviceWorker) {
+    for (const id of ['app-update','update-message','apply-update']) nodes.set(id, element(id));
+    nodes.get('app-update').hidden=true;
+  }
   const document = {
+    visibilityState:'visible',
     querySelector(selector) {return selector.startsWith('#') ? nodes.get(selector.slice(1)) || null : null;},
     querySelectorAll(selector){
       if (selector.includes('#session-answer input') && nodes.has('answer')) return [nodes.get('answer')];
@@ -83,7 +92,7 @@ function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash 
     constructor(...args) {super(...(args.length ? args : [clock]));}
     static now(){return clock;}
   }
-  const sandbox = {document, console, Date:ClockDate, navigator:{}, location:{hash, protocol:'https:'},
+  const sandbox = {document, console, Date:ClockDate, navigator:{serviceWorker}, location:{hash, protocol:'https:',reload(){reloads++;}},
     localStorage:{getItem:key=>store.get(key) ?? null, setItem:(key,value)=>store.set(key,value), removeItem:key=>store.delete(key)},
     setInterval(fn, delay){const id=++serial;intervals.set(id,{fn,delay});return id;},
     clearInterval(id){intervals.delete(id);},
@@ -121,6 +130,7 @@ function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash 
     get session(){return JSON.parse(store.get(SESSION) || 'null');},
     get now(){return clock;},
     get speaking(){return sandbox.speechSynthesis.speaking;},
+    get reloads(){return reloads;},
     click(action, extra={}){const target={dataset:{action,...extra},closest(){return this;}};dispatch('click',{target});},
     clickRouteLink(hash){
       let prevented=false;
@@ -131,11 +141,40 @@ function boot({store = new Map(), now = new Date(2026,10,16,12).getTime(), hash 
     input(value){const target=nodes.get('answer');assert.ok(target, 'an answer input is rendered');target.value=value;dispatch('input',{target});},
     change(target){dispatch('change',{target});},
     frame(){for(const callback of frames.splice(0))callback();},
+    windowEvent(name){for(const fn of windowEvents[name] || [])fn();},
+    visibility(value){document.visibilityState=value;dispatch('visibilitychange',{});},
     route(hash){sandbox.location.hash=hash;for(const fn of windowEvents.hashchange || [])fn();},
     tick(milliseconds){clock+=milliseconds;for(const {fn,delay} of [...intervals.values()])if(delay===500||delay===1000)fn();},
     async importBackup(backup){dispatch('change',{target:{id:'import-backup',value:'backup.json',files:[{size:JSON.stringify(backup).length,text:async()=>JSON.stringify(backup)}]}});await new Promise(resolve=>setImmediate(resolve));},
   };
 }
+
+function updateFixture({controlled=true}={}) {
+  const registration=Object.assign(new EventTarget(),{checks:0,waiting:null,installing:null,async update(){this.checks++;}});
+  const container=Object.assign(new EventTarget(),{
+    controller:controlled?new EventTarget():null,
+    async register(){return registration;}
+  });
+  return {
+    registration,container,
+    install(){
+      const worker=Object.assign(new EventTarget(),{messages:[],postMessage(message){this.messages.push(message);}});
+      registration.installing=worker;
+      registration.dispatchEvent(new Event('updatefound'));
+      registration.installing=null;
+      registration.waiting=worker;
+      worker.dispatchEvent(new Event('statechange'));
+      return worker;
+    },
+    activate(worker){
+      registration.waiting=null;
+      container.controller=worker;
+      container.dispatchEvent(new Event('controllerchange'));
+    }
+  };
+}
+
+const settle = () => new Promise(resolve=>setImmediate(resolve));
 
 function displayedQuestionIndexes(app) {
   return Array.from(app.nodes.get('session-questions').innerHTML.matchAll(/data-index="(\d+)"/g), match => Number(match[1]));
@@ -172,6 +211,83 @@ test('the startup mark dismisses after the first paint, immediately with reduced
   const reducedSplash=boot({reducedMotion:true}).nodes.get('app-splash');
   assert.equal(reducedSplash.classList.contains('is-ready'),true);
   assert.equal(reducedSplash.hidden,true);
+});
+
+test('first install stays quiet and foreground events check for an update without applying it', async () => {
+  const updates=updateFixture({controlled:false});
+  const app=boot({serviceWorker:updates.container});
+  await settle();
+  const banner=app.nodes.get('app-update');
+  const first=updates.install();
+  assert.equal(banner.hidden,true);
+  updates.activate(first);
+  assert.equal(banner.hidden,true);
+  assert.equal(app.reloads,0);
+  assert.equal(updates.registration.checks,1);
+  app.visibility('hidden');
+  app.windowEvent('focus');
+  assert.equal(updates.registration.checks,1);
+  app.visibility('visible');
+  app.windowEvent('pageshow');
+  await settle();
+  assert.equal(updates.registration.checks,2);
+  const next=updates.install();
+  assert.equal(banner.hidden,false);
+  assert.equal(next.messages.length,0);
+  assert.equal(app.reloads,0);
+});
+
+test('update waits until the exercise is saved and reload preserves learning data, drafts and the mock session', async () => {
+  const updates=updateFixture();
+  const app=boot({hash:'#mock',serviceWorker:updates.container});
+  await settle();
+  app.click('question',{id:'reading-0'});app.input('alpha');app.click('submit-answer');app.click('next-question');
+  app.click('single-mock',{skill:'writing'});
+  app.input('A saved draft for the mock.');
+  app.click('toggle-question-mark');
+  const next=updates.install();
+  const banner=app.nodes.get('app-update');
+  const button=app.nodes.get('apply-update');
+  assert.equal(banner.hidden,true);
+  button.click();
+  assert.equal(next.messages.length,0);
+  app.click('exit-session');
+  assert.equal(banner.hidden,false);
+  const before=new Map(app.store);
+  button.click();
+  assert.equal(next.messages[0].type,'IELTS_APPLY_UPDATE');
+  assert.equal(button.disabled,true);
+  assert.equal(app.reloads,0);
+  updates.activate(next);
+  assert.equal(app.reloads,1);
+  assert.deepEqual(app.store,before);
+  const reloaded=boot({store:app.store});
+  assert.equal(reloaded.state.progress['reading-0'].attempts,1);
+  reloaded.click('resume');
+  assert.equal(reloaded.session.deadline,app.session.deadline);
+  assert.equal(reloaded.session.marked['writing-1'],true);
+  assert.equal(reloaded.nodes.get('answer').value,'A saved draft for the mock.');
+});
+
+test('another tab activating an update, or a late activation after a tap, never reloads an active exercise', async () => {
+  for(const requested of [false,true]){
+    const updates=updateFixture();
+    const app=boot({hash:'#mock',serviceWorker:updates.container});
+    await settle();
+    const next=updates.install();
+    const button=app.nodes.get('apply-update');
+    if(requested)button.click();
+    app.click('question',{id:'reading-0'});
+    app.input('my answer');
+    updates.activate(next);
+    assert.equal(app.reloads,0);
+    assert.equal(app.nodes.get('app-update').hidden,true);
+    assert.equal(app.nodes.get('answer').value,'my answer');
+    app.click('exit-session');
+    assert.equal(app.nodes.get('app-update').hidden,false);
+    button.click();
+    assert.equal(app.reloads,1);
+  }
 });
 
 test('dashboard resumes a saved quick practice at the last question with its draft', () => {
